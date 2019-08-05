@@ -1,5 +1,5 @@
 import sys
-from lib import unhex, xor_bytestrings, hexify
+from lib import unhex, xor_bytestrings, hexify, add_bytestrings
 from Crypto.Cipher.AES import AESCipher
 from Crypto import Random 
 
@@ -25,30 +25,39 @@ def pad_pkcs7(plaintext):
 
   return plaintext
 
-def count_blocks(text, min_blocks = 0):
-  if (len(text) % BLOCK_SIZE != 0):
-    raise Exception("Not block aligned")
+# counts num blocks, +1 if last block not multiple of block size
+def count_blocks(text):
+  return int(len(text) / BLOCK_SIZE + 0.5 )
 
-  num_blocks = len(text) // BLOCK_SIZE
-  if (num_blocks < min_blocks):
-    raise Exception("Invalid size")
+def skip_bytes(text, num_bytes):
+  length = len(text)
+  return text[num_bytes : length]
 
-  return num_blocks
+def generate_blocks(text):
+  num_blocks = count_blocks(text)
+  length = len(text)
 
-def generate_blocks(text, start_block = 0):
-  num_blocks = count_blocks(text, start_block)
+  for i in range(0, num_blocks):
+    start = i * BLOCK_SIZE
+    end = (i+1) * BLOCK_SIZE
+    if (end > length):
+      end = length
+    block = text[start : end]
 
-  for i in range(start_block, num_blocks):
-    yield text[i * BLOCK_SIZE : (i+1) * BLOCK_SIZE]
+    yield (i, block)
 
 
 def decrypt_aes_cbc(key, ciphertext):
-  count_blocks(ciphertext, 2)
+  if (len(ciphertext) % BLOCK_SIZE != 0):
+    raise Exception("Not block aligned")
+
+  if (len(ciphertext) // BLOCK_SIZE < 2):
+    raise Exception("Invalid size")
 
   cipher = AESCipher(key)
   plaintext = b""
   dec_xor = ciphertext[0:BLOCK_SIZE] # IV
-  for ciphertext_block in generate_blocks(ciphertext, 1):
+  for (i, ciphertext_block) in generate_blocks(skip_bytes(ciphertext, BLOCK_SIZE)):
     decrypted_block = cipher.decrypt(ciphertext_block)
 
     plaintext_block = xor_bytestrings(dec_xor, decrypted_block)
@@ -66,7 +75,7 @@ def encrypt_aes_cbc(key, plaintext):
   pre_xor = iv
 
   ciphertext = b""
-  for plaintext_block in generate_blocks(padded_plaintext):
+  for (i, plaintext_block) in generate_blocks(padded_plaintext):
     xord = xor_bytestrings(plaintext_block, pre_xor)
 
     cipher_block = cipher.encrypt(xord)
@@ -74,6 +83,28 @@ def encrypt_aes_cbc(key, plaintext):
     pre_xor = cipher_block
 
   return iv + ciphertext
+
+def int_to_bytes(num, num_bytes):
+  return (num).to_bytes(num_bytes, byteorder='big')
+
+def decrypt_aes_ctr(key, ciphertext):
+  if (len(ciphertext) < BLOCK_SIZE):
+    raise Exception("Invalid size")
+
+  nonce_size = BLOCK_SIZE // 2
+  nonce = ciphertext[0:BLOCK_SIZE]
+  cipher = AESCipher(key)
+  plaintext = b""
+
+  for (i, cipher_block) in generate_blocks(skip_bytes(ciphertext, BLOCK_SIZE)):
+    pre_enc = add_bytestrings(nonce, int_to_bytes(i, BLOCK_SIZE))
+    enc = cipher.encrypt(pre_enc)
+
+    plaintext_block = xor_bytestrings(enc, cipher_block)
+    plaintext += plaintext_block
+
+  return plaintext
+
 
 #### ASSIGNMENT 2
 
@@ -88,3 +119,5 @@ def check_test(prefix, key_hex, cipher_hex, encryptor, decryptor):
 
 check_test("txt1", "140b41b22a29beb4061bda66b6747e14", "4ca00ff4c898d61e1edbf1800618fb2828a226d160dad07883d04e008a7897ee2e4b7465d5290d0c0e6c6822236e1daafb94ffe0c5da05d9476be028ad7c1d81", encrypt_aes_cbc, decrypt_aes_cbc)
 
+plain = decrypt_aes_ctr(unhex("36f18357be4dbd77f050515c73fcf9f2"), unhex("69dda8455c7dd4254bf353b773304eec0ec7702330098ce7f7520d1cbbb20fc388d1b0adb5054dbd7370849dbf0b88d393f252e764f1f5f7ad97ef79d59ce29f5f51eeca32eabedd9afa9329"))
+print(plain.decode("utf-8"))
