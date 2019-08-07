@@ -1,5 +1,5 @@
 import sys
-from lib import unhex, xor_bytestrings, hexify, add_bytestrings
+from lib import unhex, xor_bytestrings, hexify, add_bytestrings, count_blocks, skip_bytes, generate_blocks
 from Crypto.Cipher.AES import AESCipher
 from Crypto import Random 
 
@@ -25,26 +25,6 @@ def pad_pkcs7(plaintext):
 
   return plaintext
 
-# counts num blocks, +1 if last block not multiple of block size
-def count_blocks(text):
-  return int(len(text) / BLOCK_SIZE + 0.5 )
-
-def skip_bytes(text, num_bytes):
-  length = len(text)
-  return text[num_bytes : length]
-
-def generate_blocks(text):
-  num_blocks = count_blocks(text)
-  length = len(text)
-
-  for i in range(0, num_blocks):
-    start = i * BLOCK_SIZE
-    end = (i+1) * BLOCK_SIZE
-    if (end > length):
-      end = length
-    block = text[start : end]
-
-    yield (i, block)
 
 
 def decrypt_aes_cbc(key, ciphertext):
@@ -57,7 +37,7 @@ def decrypt_aes_cbc(key, ciphertext):
   cipher = AESCipher(key)
   plaintext = b""
   dec_xor = ciphertext[0:BLOCK_SIZE] # IV
-  for (i, ciphertext_block) in generate_blocks(skip_bytes(ciphertext, BLOCK_SIZE)):
+  for (i, ciphertext_block) in generate_blocks(skip_bytes(ciphertext, BLOCK_SIZE), BLOCK_SIZE):
     decrypted_block = cipher.decrypt(ciphertext_block)
 
     plaintext_block = xor_bytestrings(dec_xor, decrypted_block)
@@ -78,7 +58,7 @@ def encrypt_aes_cbc(key, plaintext):
   pre_xor = iv
 
   ciphertext = b""
-  for (i, plaintext_block) in generate_blocks(padded_plaintext):
+  for (i, plaintext_block) in generate_blocks(padded_plaintext, BLOCK_SIZE):
     xord = xor_bytestrings(plaintext_block, pre_xor)
 
     cipher_block = cipher.encrypt(xord)
@@ -94,7 +74,7 @@ def apply_aes_ctr(key, nonce, source):
   cipher = AESCipher(key)
   dest = b""
 
-  for (i, cipher_block) in generate_blocks(source):
+  for (i, cipher_block) in generate_blocks(source, BLOCK_SIZE):
     pre_enc = add_bytestrings(nonce, int_to_bytes(i, BLOCK_SIZE))
     enc = cipher.encrypt(pre_enc)
 
