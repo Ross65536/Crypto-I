@@ -65,7 +65,6 @@ def cbc_aes_oracle_attack(ciphertext):
         if (g == 255):
           raise Exception("Failed to guess")
 
-    print("block")
     cipher_list = cipher_list[:-BLOCK_SIZE]
           
   return bytes(reversed(plaintext))
