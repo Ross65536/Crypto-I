@@ -45,5 +45,3 @@ def generate_blocks(text, block_size):
 
     yield (i, block)
 
-# counts num blocks, +1 if last block not multiple of block size
-
